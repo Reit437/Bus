@@ -3,6 +3,8 @@ package com.example.bus
 import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -23,7 +25,9 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -42,18 +46,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var favButton: Button
     private lateinit var refreshAll: Button
     private lateinit var favList: RecyclerView
+    private lateinit var settingsButton: Button
 
     private lateinit var favAdapter: FavAdapter
     private val favItems = mutableListOf<String>()
+
+    private var workers: List<FavWorker>? = null
 
     private var parsed = false
     private var mode = "search"
     private var currentStopId: String = ""
     private var currentStopUrl: String = ""
-    private var favUpdatingId: String = ""
     private var lastBackPress = 0L
-
-    private val updateQueue = ArrayDeque<String>()
 
     private val prefs by lazy { getSharedPreferences("stops", MODE_PRIVATE) }
 
@@ -64,6 +68,11 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Применяем сохранённую тему до setContentView
+        val savedTheme = prefs.getInt("theme_mode", AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
+        AppCompatDelegate.setDefaultNightMode(savedTheme)
+
         setContentView(R.layout.activity_main)
 
         autoComplete = findViewById(R.id.autoComplete)
@@ -75,6 +84,11 @@ class MainActivity : AppCompatActivity() {
         favButton = findViewById(R.id.favButton)
         refreshAll = findViewById(R.id.refreshAll)
         favList = findViewById(R.id.favList)
+        settingsButton = findViewById(R.id.settingsButton)
+
+        settingsButton.setOnClickListener { settingsButton.setOnClickListener {
+            startActivity(android.content.Intent(this, SettingsActivity::class.java))
+        } }
 
         adapter = SuggestAdapter(this, suggestions)
         autoComplete.setAdapter(adapter)
@@ -212,22 +226,158 @@ class MainActivity : AppCompatActivity() {
                 when (mode) {
                     "search" -> extractStopLinks(view)
                     "stop" -> parseSchedule(view)
-                    "fav-update" -> parseSchedule(view)
                 }
             }
         }
 
         webView.addJavascriptInterface(object {
             @JavascriptInterface fun onSuggest(json: String) { runOnUiThread { showSuggestions(json) } }
-            @JavascriptInterface fun onParsed(json: String) { runOnUiThread { handleParsed(json) } }
+            @JavascriptInterface fun onParsed(json: String) { runOnUiThread { handleStopParsed(json) } }
             @JavascriptInterface fun onDebug(s: String) { Log.d("bus", "DBG:\n$s") }
         }, "Android")
 
         showMainView()
-        startUpdateAll()
+        Handler(Looper.getMainLooper()).postDelayed({ startUpdateAll() }, 500)
     }
 
-    // === Избранное ===
+    private fun showSettingsDialog() {
+        val options = arrayOf("Системная", "Светлая", "Тёмная")
+        val modes = intArrayOf(
+            AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM,
+            AppCompatDelegate.MODE_NIGHT_NO,
+            AppCompatDelegate.MODE_NIGHT_YES
+        )
+        val current = prefs.getInt("theme_mode", AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
+        val checked = modes.indexOf(current).coerceAtLeast(0)
+
+        AlertDialog.Builder(this)
+            .setTitle("Тема")
+            .setSingleChoiceItems(options, checked) { dialog, which ->
+                prefs.edit().putInt("theme_mode", modes[which]).apply()
+                AppCompatDelegate.setDefaultNightMode(modes[which])
+                dialog.dismiss()
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    private inner class FavWorker(val index: Int) {
+        val webView: WebView = WebView(this@MainActivity)
+        private val queue = ArrayDeque<Pair<String, String>>()
+        private var currentId: String = ""
+        private var busy = false
+
+        init {
+            webView.settings.javaScriptEnabled = true
+            webView.settings.userAgentString =
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            webView.settings.blockNetworkImage = true
+            webView.settings.loadsImagesAutomatically = false
+            webView.settings.domStorageEnabled = true
+            webView.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+
+            webView.webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(
+                    view: WebView?, request: WebResourceRequest?
+                ): WebResourceResponse? {
+                    val url = request?.url?.toString() ?: return null
+                    val blocked = url.contains("mc.yandex.ru") ||
+                            url.contains("surveys.yandex.ru") ||
+                            url.contains("static-mon.yandex.net") ||
+                            url.endsWith(".woff") || url.endsWith(".woff2")
+                    if (blocked) {
+                        return WebResourceResponse(
+                            "text/plain", "utf-8",
+                            ByteArrayInputStream(ByteArray(0))
+                        )
+                    }
+                    return super.shouldInterceptRequest(view, request)
+                }
+
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    if (url == null || currentId.isEmpty()) return
+                    parseWorker(view)
+                }
+            }
+
+            webView.addJavascriptInterface(object {
+                @JavascriptInterface
+                fun onParsed(json: String) {
+                    runOnUiThread { handleWorkerResult(currentId, json) }
+                }
+            }, "AndroidW$index")
+        }
+
+        fun enqueue(id: String, url: String) {
+            queue.add(id to url)
+            if (!busy) processNext()
+        }
+
+        fun isIdle(): Boolean = !busy && queue.isEmpty()
+
+        private fun processNext() {
+            val task = queue.removeFirstOrNull()
+            if (task == null) {
+                busy = false
+                return
+            }
+            busy = true
+            currentId = task.first
+            webView.loadUrl(task.second)
+        }
+
+        private fun parseWorker(view: WebView?) {
+            val js = """
+                (function(){
+                    if (window.__busParseStarted) return;
+                    window.__busParseStarted = true;
+                    var attempts = 0;
+                    var timer = setInterval(function(){
+                        attempts++;
+                        var items = document.querySelectorAll('li.masstransit-vehicle-snippet-view');
+                        if (items.length > 0 || attempts > 40) {
+                            clearInterval(timer);
+                            var out = [];
+                            for (var i = 0; i < items.length; i++) {
+                                var t = (items[i].textContent || '').trim().replace(/\s+/g, ' ');
+                                var m = t.match(/^(.+?)до\s*«([^»]+)»\s*(\d+)\s*мин/);
+                                if (m) {
+                                    var route = m[1].trim();
+                                    if (route.length > 0 && route.length <= 5) out.push(route + '|||' + m[3] + '|||' + m[2].trim());
+                                }
+                            }
+                            AndroidW$index.onParsed(JSON.stringify(out));
+                        }
+                    }, 400);
+                })()
+            """.trimIndent()
+            view?.evaluateJavascript(js, null)
+        }
+
+        private fun handleWorkerResult(id: String, json: String) {
+            try {
+                val arr = JSONArray(json)
+                val lines = mutableListOf<String>()
+                val max = minOf(3, arr.length())
+                for (i in 0 until max) {
+                    val parts = arr.getString(i).split("|||")
+                    if (parts.size < 3) continue
+                    val route = parts[0]; val mins = parts[1]
+                    lines.add("$route → $mins мин")
+                }
+                val cache = if (lines.isEmpty()) "—" else lines.joinToString("\n")
+                prefs.edit()
+                    .putString("cache_$id", cache)
+                    .putLong("updated_$id", System.currentTimeMillis())
+                    .apply()
+                renderFavorites()
+            } catch (e: Exception) {
+                Log.e("bus", "worker $index parsed err: ${e.message}")
+            }
+            currentId = ""
+            processNext()
+        }
+    }
 
     private fun getFavorites(): MutableList<String> {
         val s = prefs.getString("favorites", "") ?: ""
@@ -264,22 +414,17 @@ class MainActivity : AppCompatActivity() {
     private fun startUpdateAll() {
         val ids = getFavorites()
         if (ids.isEmpty()) return
-        updateQueue.clear()
-        updateQueue.addAll(ids)
-        updateNextFavorite()
+        if (workers == null) {
+            workers = listOf(FavWorker(0), FavWorker(1), FavWorker(2))
+        }
+        val w = workers!!
+        var i = 0
+        for (id in ids) {
+            val url = prefs.getString("url_$id", null) ?: continue
+            w[i % w.size].enqueue(id, url)
+            i++
+        }
     }
-
-    private fun updateNextFavorite() {
-        if (updateQueue.isEmpty()) return
-        val id = updateQueue.removeFirst()
-        val url = prefs.getString("url_$id", null) ?: return updateNextFavorite()
-        favUpdatingId = id
-        mode = "fav-update"
-        parsed = false
-        webView.loadUrl(url)
-    }
-
-    // === Экраны ===
 
     private fun showMainView() {
         mode = "search"
@@ -307,8 +452,6 @@ class MainActivity : AppCompatActivity() {
         favButton.text = if (inFav) "★ Убрать" else "★ В избранное"
     }
 
-    // === Поиск ===
-
     private fun stopIdFromUrl(url: String): String? {
         val m = Regex("stopId\\]?=([^&]+)").find(url)
         return m?.groupValues?.get(1)
@@ -316,7 +459,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun searchStops(query: String) {
         if (query.isBlank()) return
-        updateQueue.clear()
         mode = "search"
         parsed = false
         autoComplete.visibility = View.VISIBLE
@@ -467,13 +609,6 @@ class MainActivity : AppCompatActivity() {
         view?.evaluateJavascript(js, null)
     }
 
-    private fun handleParsed(raw: String) {
-        when (mode) {
-            "fav-update" -> handleFavParsed(raw)
-            "stop" -> handleStopParsed(raw)
-        }
-    }
-
     private fun handleStopParsed(raw: String) {
         try {
             val arr = JSONArray(raw)
@@ -502,31 +637,6 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) { Log.e("bus", "stop parsed err: ${e.message}") }
     }
 
-    private fun handleFavParsed(raw: String) {
-        try {
-            val arr = JSONArray(raw)
-            val lines = mutableListOf<String>()
-            val max = minOf(3, arr.length())
-            for (i in 0 until max) {
-                val parts = arr.getString(i).split("|||")
-                if (parts.size < 3) continue
-                val route = parts[0]; val mins = parts[1]
-                lines.add("$route → $mins мин")
-            }
-            if (favUpdatingId.isNotEmpty()) {
-                val cache = if (lines.isEmpty()) "—" else lines.joinToString("\n")
-                prefs.edit()
-                    .putString("cache_$favUpdatingId", cache)
-                    .putLong("updated_$favUpdatingId", System.currentTimeMillis())
-                    .apply()
-            }
-            renderFavorites()
-        } catch (e: Exception) { Log.e("bus", "fav parsed err: ${e.message}") }
-        updateNextFavorite()
-    }
-
-    // === Адаптеры ===
-
     private class FavAdapter(
         private val items: List<String>,
         private val onClick: (String) -> Unit,
@@ -552,16 +662,13 @@ class MainActivity : AppCompatActivity() {
             val prefs = ctx.getSharedPreferences("stops", Context.MODE_PRIVATE)
             val name = prefs.getString("name_$id", null)
                 ?: prefs.getString("origName_$id", null) ?: id
-            val cache = prefs.getString("cache_$id", null)
-                ?: "Нажмите, чтобы загрузить расписание"
             val updated = prefs.getLong("updated_$id", 0L)
+            val fresh = System.currentTimeMillis() - updated < 30_000
+            val cache = prefs.getString("cache_$id", null)
 
             holder.name.text = name
-            holder.body.text = cache
-            holder.updated.text = if (updated > 0) {
-                val mins = ((System.currentTimeMillis() - updated) / 60000).toInt()
-                if (mins < 1) "обновлено сейчас" else "обновлено $mins мин назад"
-            } else ""
+            holder.body.text = if (fresh && cache != null) cache else ""
+            holder.updated.text = ""
 
             holder.itemView.setOnClickListener { onClick(id) }
         }

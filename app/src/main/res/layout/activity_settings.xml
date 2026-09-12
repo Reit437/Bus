@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:paddingTop="48dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Настройки"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:textColor="?attr/colorPrimary"
+        android:paddingTop="48dp"
+        android:paddingBottom="24dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Тема"
+        android:textSize="16sp"
+        android:paddingBottom="8dp" />
+
+    <RadioGroup
+        android:id="@+id/themeGroup"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <RadioButton
+            android:id="@+id/themeSystem"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Системная" />
+
+        <RadioButton
+            android:id="@+id/themeLight"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Светлая" />
+
+        <RadioButton
+            android:id="@+id/themeDark"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Тёмная" />
+    </RadioGroup>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="Версия 0.5"
+        android:textSize="12sp"
+        android:textColor="?attr/colorPrimary"
+        android:paddingTop="16dp"
+        android:paddingBottom="48dp" />
+
+</LinearLayout>
