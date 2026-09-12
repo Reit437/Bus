@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:fitsSystemWindows="true"
+    android:paddingTop="48dp">
+
+    <AutoCompleteTextView
+        android:id="@+id/autoComplete"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Остановка"
+        android:paddingVertical="24dp"
+        android:paddingHorizontal="8dp"
+        android:layout_marginTop="24dp"
+        android:completionThreshold="1"
+        android:inputType="text"
+        android:imeOptions="actionSearch"
+        android:singleLine="true" />
+
+    <Button
+        android:id="@+id/refreshAll"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="8dp"
+        android:visibility="gone"
+        android:text="Обновить избранное" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/favList"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingHorizontal="4dp" />
+
+    <LinearLayout
+        android:id="@+id/renameBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="8dp"
+        android:layout_marginTop="24dp">
+
+        <EditText
+            android:id="@+id/renameInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Имя остановки"
+            android:inputType="text"
+            android:maxLines="1" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="4dp">
+
+            <Button
+                android:id="@+id/favButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="★ В избранное" />
+
+            <Button
+                android:id="@+id/renameSave"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="Сохранить имя" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/resultText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="12dp"
+        android:textSize="14sp" />
+
+    <WebView
+        android:id="@+id/webView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="0" />
+</LinearLayout>
