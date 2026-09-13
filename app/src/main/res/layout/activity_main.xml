@@ -31,18 +31,27 @@
             android:text="⚙" />
     </LinearLayout>
 
-    <AutoCompleteTextView
-        android:id="@+id/autoComplete"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Остановка"
-        android:paddingVertical="24dp"
-        android:paddingHorizontal="8dp"
-        android:layout_marginTop="24dp"
-        android:completionThreshold="1"
-        android:inputType="text"
-        android:imeOptions="actionSearch"
-        android:singleLine="true" />
+        android:layout_marginHorizontal="8dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/search_bg">
+
+        <AutoCompleteTextView
+            android:id="@+id/autoComplete"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Поиск"
+            android:textStyle="bold"
+            android:paddingVertical="8dp"
+            android:paddingHorizontal="8dp"
+            android:completionThreshold="1"
+            android:inputType="text"
+            android:imeOptions="actionSearch"
+            android:singleLine="true"
+            android:background="@android:color/transparent" />
+    </LinearLayout>
 
     <Button
         android:id="@+id/refreshAll"
@@ -52,12 +61,23 @@
         android:visibility="gone"
         android:text="Обновить избранное" />
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/favList"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:paddingHorizontal="4dp" />
+        android:layout_weight="1">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/favList"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:paddingHorizontal="4dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="32dp"
+            android:layout_gravity="bottom"
+            android:background="@drawable/fade_bottom" />
+    </FrameLayout>
 
     <LinearLayout
         android:id="@+id/renameBar"

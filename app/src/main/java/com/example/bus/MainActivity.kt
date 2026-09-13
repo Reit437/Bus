@@ -646,7 +646,9 @@ class MainActivity : AppCompatActivity() {
 
         class VH(v: View) : RecyclerView.ViewHolder(v) {
             val name: TextView = v.findViewById(R.id.favName)
-            val body: TextView = v.findViewById(R.id.favBody)
+            val bus1: TextView = v.findViewById(R.id.favBus1)
+            val bus2: TextView = v.findViewById(R.id.favBus2)
+            val bus3: TextView = v.findViewById(R.id.favBus3)
             val updated: TextView = v.findViewById(R.id.favUpdated)
         }
 
@@ -667,13 +669,17 @@ class MainActivity : AppCompatActivity() {
             val cache = prefs.getString("cache_$id", null)
 
             holder.name.text = name
-            holder.body.text = if (fresh && cache != null) cache else ""
+
+            val lines = if (fresh && cache != null) cache.split("\n") else emptyList()
+            holder.bus1.text = lines.getOrNull(0) ?: ""
+            holder.bus2.text = lines.getOrNull(1) ?: ""
+            holder.bus3.text = lines.getOrNull(2) ?: ""
             holder.updated.text = ""
 
             holder.itemView.setOnClickListener { onClick(id) }
         }
 
-        override fun getItemCount() = items.size
+        override fun getItemCount(): Int = items.size
     }
 
     private class SuggestAdapter(
@@ -697,8 +703,10 @@ class MainActivity : AppCompatActivity() {
             val t1 = v.findViewById<TextView>(android.R.id.text1)
             val t2 = v.findViewById<TextView>(android.R.id.text2)
             t1.text = items[position].first
+            t1.setTypeface(null, android.graphics.Typeface.BOLD)
             t2.text = items[position].second
             t2.textSize = 11f
+            t2.setTypeface(null, android.graphics.Typeface.BOLD)
             return v
         }
         override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View =
