@@ -19,7 +19,7 @@ android {
         applicationId = "com.example.bus"
         minSdk = 24
         targetSdk = 37
-        versionCode = 2
+        versionCode = 1
         versionName = "0.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

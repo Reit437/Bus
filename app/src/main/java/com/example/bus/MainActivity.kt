@@ -21,17 +21,16 @@ import android.widget.AutoCompleteTextView
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Filter
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.king.app.updater.AppUpdater
 import org.json.JSONArray
 import java.io.ByteArrayInputStream
 import java.util.Collections
@@ -47,7 +46,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var favButton: Button
     private lateinit var refreshAll: Button
     private lateinit var favList: RecyclerView
+    private lateinit var favContainer: FrameLayout
     private lateinit var settingsButton: Button
+    private lateinit var updateHint: TextView
 
     private lateinit var favAdapter: FavAdapter
     private val favItems = mutableListOf<String>()
@@ -84,9 +85,15 @@ class MainActivity : AppCompatActivity() {
         favButton = findViewById(R.id.favButton)
         refreshAll = findViewById(R.id.refreshAll)
         favList = findViewById(R.id.favList)
+        favContainer = findViewById(R.id.favContainer)
         settingsButton = findViewById(R.id.settingsButton)
+        updateHint = findViewById(R.id.updateHint)
 
         settingsButton.setOnClickListener {
+            startActivity(android.content.Intent(this, SettingsActivity::class.java))
+        }
+
+        updateHint.setOnClickListener {
             startActivity(android.content.Intent(this, SettingsActivity::class.java))
         }
 
@@ -238,20 +245,14 @@ class MainActivity : AppCompatActivity() {
 
         showMainView()
         Handler(Looper.getMainLooper()).postDelayed({ startUpdateAll() }, 500)
-
-        // Проверка обновлений через AppUpdater
-        checkForUpdates()
     }
 
-    // === Автообновление ===
-
-    private fun checkForUpdates() {
-        try {
-            val apkUrl = "https://github.com/Reit437/Bus/releases/download/v0.5/app-release.apk"
-            AppUpdater(this, apkUrl).start()
-        } catch (e: Exception) {
-            Log.e("bus", "update err: ${e.message}")
-        }
+    override fun onResume() {
+        super.onResume()
+        val last = prefs.getLong("last_update_check", 0L)
+        val thirtyDays = 30L * 24 * 60 * 60 * 1000
+        val show = System.currentTimeMillis() - last > thirtyDays
+        updateHint.visibility = if (show) View.VISIBLE else View.GONE
     }
 
     // === Воркеры ===
@@ -356,7 +357,7 @@ class MainActivity : AppCompatActivity() {
                     val parts = arr.getString(i).split("|||")
                     if (parts.size < 3) continue
                     val route = parts[0]; val mins = parts[1]
-                    lines.add("$route → $mins мин")
+                    lines.add("$route ➔ $mins мин")
                 }
                 val cache = if (lines.isEmpty()) "—" else lines.joinToString("\n")
                 prefs.edit()
@@ -403,7 +404,7 @@ class MainActivity : AppCompatActivity() {
         favItems.clear()
         favItems.addAll(getFavorites())
         favAdapter.notifyDataSetChanged()
-        refreshAll.visibility = if (favItems.isEmpty()) View.GONE else View.VISIBLE
+        refreshAll.visibility = if (favItems.isEmpty() || mode == "stop") View.GONE else View.VISIBLE
     }
 
     private fun startUpdateAll() {
@@ -431,7 +432,7 @@ class MainActivity : AppCompatActivity() {
         autoComplete.visibility = View.VISIBLE
         renameBar.visibility = View.GONE
         result.visibility = View.GONE
-        favList.visibility = View.VISIBLE
+        favContainer.visibility = View.VISIBLE
         autoComplete.setText("")
         renderFavorites()
     }
@@ -440,7 +441,7 @@ class MainActivity : AppCompatActivity() {
         autoComplete.visibility = View.GONE
         renameBar.visibility = View.VISIBLE
         result.visibility = View.VISIBLE
-        favList.visibility = View.GONE
+        favContainer.visibility = View.GONE
         refreshAll.visibility = View.GONE
     }
 
@@ -463,7 +464,7 @@ class MainActivity : AppCompatActivity() {
         autoComplete.visibility = View.VISIBLE
         renameBar.visibility = View.GONE
         result.visibility = View.GONE
-        favList.visibility = View.VISIBLE
+        favContainer.visibility = View.VISIBLE
         suggestions.clear()
         suggestionUrls.clear()
         adapter.notifyDataSetChanged()
@@ -608,12 +609,27 @@ class MainActivity : AppCompatActivity() {
         view?.evaluateJavascript(js, null)
     }
 
+    private fun resolveAttrColor(attrRes: Int): Int {
+        val tv = android.util.TypedValue()
+        theme.resolveAttribute(attrRes, tv, true)
+        return tv.data
+    }
+
+    private fun isNightTheme(): Boolean {
+        return (resources.configuration.uiMode and
+                android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                android.content.res.Configuration.UI_MODE_NIGHT_YES
+    }
+
     private fun handleStopParsed(raw: String) {
         try {
             val arr = JSONArray(raw)
-            val sb = StringBuilder()
+
+            data class Row(val route: String, val mins: String, val dest: String)
+            val rows = mutableListOf<Row>()
             var firstDest: String? = null
             val routes = mutableListOf<String>()
+
             for (i in 0 until arr.length()) {
                 val item = arr.getString(i)
                 val parts = item.split("|||")
@@ -621,8 +637,9 @@ class MainActivity : AppCompatActivity() {
                 val route = parts[0]; val mins = parts[1]; val dest = parts[2]
                 if (firstDest == null) firstDest = dest
                 if (!routes.contains(route)) routes.add(route)
-                sb.append(route).append(" → ").append(mins).append(" мин (до ").append(dest).append(")\n")
+                rows.add(Row(route, mins, dest))
             }
+
             val routesStr = routes.joinToString(", ")
             if (routesStr.isNotEmpty() && firstDest != null && currentStopId.isNotEmpty()) {
                 prefs.edit()
@@ -630,9 +647,49 @@ class MainActivity : AppCompatActivity() {
                     .putString("dest_$currentStopId", firstDest)
                     .apply()
             }
-            val header = if (routesStr.isNotEmpty() && firstDest != null)
-                "Автобусы: $routesStr\nдо $firstDest\n\n" else ""
-            result.text = if (sb.isEmpty()) "Расписание не найдено" else header + sb.toString()
+
+            if (rows.isEmpty()) {
+                result.text = "Расписание не найдено"
+                return
+            }
+
+            val sb = android.text.SpannableStringBuilder()
+            val headerColor = resolveAttrColor(com.google.android.material.R.attr.colorPrimary)
+            val green = android.graphics.Color.parseColor("#61B300")
+            val black = if (isNightTheme()) android.graphics.Color.WHITE else android.graphics.Color.BLACK
+
+            fun boldSpan(start: Int, end: Int) {
+                sb.setSpan(
+                    android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+                    start, end, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+            fun colorSpan(color: Int, start: Int, end: Int) {
+                sb.setSpan(
+                    android.text.style.ForegroundColorSpan(color),
+                    start, end, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+
+            // Шапка
+            val hs = sb.length
+            sb.append("Автобусы: $routesStr\n\n")
+            boldSpan(hs, sb.length)
+            colorSpan(headerColor, hs, sb.length)
+
+            for (row in rows) {
+                val s1 = sb.length
+                sb.append("${row.route} ➔ ${row.mins} мин")
+                boldSpan(s1, sb.length)
+                colorSpan(green, s1, sb.length)
+
+                val s2 = sb.length
+                sb.append(" (до ${row.dest})\n")
+                boldSpan(s2, sb.length)
+                colorSpan(black, s2, sb.length)
+            }
+
+            result.text = sb
         } catch (e: Exception) { Log.e("bus", "stop parsed err: ${e.message}") }
     }
 
