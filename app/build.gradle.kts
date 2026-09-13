@@ -52,4 +52,6 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
+    implementation("com.github.jenly1314.AppUpdater:app-updater:1.2.0")
+    implementation("com.github.jenly1314.AppUpdater:app-dialog:1.2.0")
 }

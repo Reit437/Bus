@@ -31,6 +31,7 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.king.app.updater.AppUpdater
 import org.json.JSONArray
 import java.io.ByteArrayInputStream
 import java.util.Collections
@@ -69,7 +70,6 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Применяем сохранённую тему до setContentView
         val savedTheme = prefs.getInt("theme_mode", AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
         AppCompatDelegate.setDefaultNightMode(savedTheme)
 
@@ -86,9 +86,9 @@ class MainActivity : AppCompatActivity() {
         favList = findViewById(R.id.favList)
         settingsButton = findViewById(R.id.settingsButton)
 
-        settingsButton.setOnClickListener { settingsButton.setOnClickListener {
+        settingsButton.setOnClickListener {
             startActivity(android.content.Intent(this, SettingsActivity::class.java))
-        } }
+        }
 
         adapter = SuggestAdapter(this, suggestions)
         autoComplete.setAdapter(adapter)
@@ -238,28 +238,23 @@ class MainActivity : AppCompatActivity() {
 
         showMainView()
         Handler(Looper.getMainLooper()).postDelayed({ startUpdateAll() }, 500)
+
+        // Проверка обновлений через AppUpdater
+        checkForUpdates()
     }
 
-    private fun showSettingsDialog() {
-        val options = arrayOf("Системная", "Светлая", "Тёмная")
-        val modes = intArrayOf(
-            AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM,
-            AppCompatDelegate.MODE_NIGHT_NO,
-            AppCompatDelegate.MODE_NIGHT_YES
-        )
-        val current = prefs.getInt("theme_mode", AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
-        val checked = modes.indexOf(current).coerceAtLeast(0)
+    // === Автообновление ===
 
-        AlertDialog.Builder(this)
-            .setTitle("Тема")
-            .setSingleChoiceItems(options, checked) { dialog, which ->
-                prefs.edit().putInt("theme_mode", modes[which]).apply()
-                AppCompatDelegate.setDefaultNightMode(modes[which])
-                dialog.dismiss()
-            }
-            .setNegativeButton("Отмена", null)
-            .show()
+    private fun checkForUpdates() {
+        try {
+            val apkUrl = "https://github.com/Reit437/Bus/releases/download/v0.5/app-release.apk"
+            AppUpdater(this, apkUrl).start()
+        } catch (e: Exception) {
+            Log.e("bus", "update err: ${e.message}")
+        }
     }
+
+    // === Воркеры ===
 
     private inner class FavWorker(val index: Int) {
         val webView: WebView = WebView(this@MainActivity)
@@ -312,8 +307,6 @@ class MainActivity : AppCompatActivity() {
             queue.add(id to url)
             if (!busy) processNext()
         }
-
-        fun isIdle(): Boolean = !busy && queue.isEmpty()
 
         private fun processNext() {
             val task = queue.removeFirstOrNull()
@@ -379,6 +372,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // === Избранное ===
+
     private fun getFavorites(): MutableList<String> {
         val s = prefs.getString("favorites", "") ?: ""
         if (s.isBlank()) return mutableListOf()
@@ -426,6 +421,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // === Экраны ===
+
     private fun showMainView() {
         mode = "search"
         parsed = false
@@ -451,6 +448,8 @@ class MainActivity : AppCompatActivity() {
         val inFav = getFavorites().contains(currentStopId)
         favButton.text = if (inFav) "★ Убрать" else "★ В избранное"
     }
+
+    // === Поиск ===
 
     private fun stopIdFromUrl(url: String): String? {
         val m = Regex("stopId\\]?=([^&]+)").find(url)
@@ -636,6 +635,8 @@ class MainActivity : AppCompatActivity() {
             result.text = if (sb.isEmpty()) "Расписание не найдено" else header + sb.toString()
         } catch (e: Exception) { Log.e("bus", "stop parsed err: ${e.message}") }
     }
+
+    // === Адаптеры ===
 
     private class FavAdapter(
         private val items: List<String>,
