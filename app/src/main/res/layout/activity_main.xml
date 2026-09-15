@@ -31,7 +31,7 @@
             android:text="Проверьте обновления ➜"
             android:textStyle="bold"
             android:textSize="14sp"
-            android:textColor="#61B300"
+            android:textColor="?attr/colorPrimary"
             android:visibility="gone"
             android:clickable="true"
             android:focusable="true"

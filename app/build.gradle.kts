@@ -20,7 +20,7 @@ android {
         minSdk = 24
         targetSdk = 37
         versionCode = 1
-        versionName = "0.5"
+        versionName = "0.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -54,4 +54,5 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("com.github.jenly1314.AppUpdater:app-updater:1.2.0")
     implementation("com.github.jenly1314.AppUpdater:app-dialog:1.2.0")
+    implementation("androidx.webkit:webkit:1.12.1")
 }
